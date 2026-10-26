@@ -1,100 +1,124 @@
 
+using System.Collections;
 using UnityEngine;
 
 public class PlayerMovement : MonoBehaviour
 {
-    public Grid grid;
-    public float moveSpeed = 4f;
+    [Header("Movement Settings")]
+    public float moveDuration = 0.15f;
 
-    private Vector3 targetPosition;
-    private bool isMoving = false;
+    [Header("Collision Settings")]
+    public LayerMask obstacleLayer;
 
-    void Start()
+    private Rigidbody2D rb;
+    private BoxCollider2D boxCollider;
+    private bool isMoving;
+
+    // Prepara os componentes que serão usados pelo movimento.
+    void Awake()
     {
-        // Alinha o personagem ao centro da célula inicial.
-        Vector3Int cell = grid.WorldToCell(transform.position);
-        transform.position = grid.GetCellCenterWorld(cell);
-
-        targetPosition = transform.position;
+        rb = GetComponent<Rigidbody2D>();
+        boxCollider = GetComponent<BoxCollider2D>();
     }
 
+    // Lê os comandos do jogador enquanto ele não está se movendo.
     void Update()
     {
-        // Continua o movimento até a próxima célula.
         if (isMoving)
-        {
-            MoveToTarget();
-        }
-        else
-        {
-            // Só recebe outra direção quando termina de andar.
-            CheckInput();
-        }
+            return;
+
+        Vector2 direction = GetMovementDirection();
+
+        // Inicia o movimento quando uma direção é pressionada.
+        if (direction != Vector2.zero)
+            StartCoroutine(MoveOneCell(direction));
     }
 
-    void CheckInput()
+    // Retorna a direção pressionada, sem permitir diagonais.
+    Vector2 GetMovementDirection()
     {
         float horizontal = Input.GetAxisRaw("Horizontal");
         float vertical = Input.GetAxisRaw("Vertical");
 
-        Vector3 direction = Vector3.zero;
-
-        // Prioriza a horizontal para impedir diagonais.
+        // Dá prioridade ao movimento horizontal.
         if (horizontal != 0)
-        {
-            direction = new Vector3(horizontal, 0, 0);
-        }
-        else if (vertical != 0)
-        {
-            direction = new Vector3(0, vertical, 0);
-        }
+            return new Vector2(Mathf.Sign(horizontal), 0);
 
-        // Começa a andar se alguma direção foi pressionada.
-        if (direction != Vector3.zero)
-        {
-            StartMove(direction);
-        }
+        if (vertical != 0)
+            return new Vector2(0, Mathf.Sign(vertical));
+
+        // Retorna zero quando nenhuma direção é pressionada.
+        return Vector2.zero;
     }
 
-    void StartMove(Vector3 direction)
+    // Verifica se existe uma parede no caminho do robô.
+    bool IsObstacleAhead(Vector2 direction)
     {
-        // Descobre a célula atual e a próxima célula.
-        Vector3Int currentCell = grid.WorldToCell(transform.position);
+        Vector2 checkSize = boxCollider.bounds.size * 0.7f;
 
-        Vector3Int nextCell = currentCell + new Vector3Int(
-            Mathf.RoundToInt(direction.x),
-            Mathf.RoundToInt(direction.y),
-            0
+        RaycastHit2D hit = Physics2D.BoxCast(
+            rb.position,
+            checkSize,
+            0f,
+            direction,
+            1f,
+            obstacleLayer
         );
 
-        targetPosition = grid.GetCellCenterWorld(nextCell);
+        return hit.collider != null;
+    }
+
+    // Move o robô uma célula na direção escolhida.
+    IEnumerator MoveOneCell(Vector2 direction)
+    {
         isMoving = true;
-    }
 
-    void MoveToTarget()
-    {
-        // Move o personagem até o centro da próxima célula.
-        transform.position = Vector3.MoveTowards(
-            transform.position,
-            targetPosition,
-            moveSpeed * Time.deltaTime
-        );
-
-        // Confirma que chegou antes de aceitar outra direção.
-        if (transform.position == targetPosition)
+        // Se houver um obstáculo, cancela o movimento.
+        if (IsObstacleAhead(direction))
         {
             isMoving = false;
+            yield break;
         }
+
+        Vector2 startPosition = rb.position;
+        Vector2 targetPosition = startPosition + direction;
+
+        // Percorre a distância suavemente durante o tempo definido.
+        float elapsedTime = 0f;
+
+        while (elapsedTime < moveDuration)
+        {
+            elapsedTime += Time.deltaTime;
+
+            float progress = Mathf.Clamp01(
+                elapsedTime / moveDuration
+            );
+
+            MovePlayer(startPosition, targetPosition, progress);
+
+            yield return null;
+        }
+
+        // Conclui o movimento na posição da próxima célula.
+        rb.MovePosition(targetPosition);
+
+        yield return new WaitForFixedUpdate();
+
+        isMoving = false;
+    }
+
+    // Calcula e aplica a posição intermediária do movimento.
+    void MovePlayer(
+        Vector2 startPosition,
+        Vector2 targetPosition,
+        float progress)
+    {
+        Vector2 newPosition = Vector2.Lerp(
+            startPosition,
+            targetPosition,
+            progress
+        );
+
+        rb.MovePosition(newPosition);
     }
 }
-
-
-
-
-/* 
-     Start()	    Alinha o personagem à grade no início.
-     Update()	    Decide se continua andando ou recebe uma nova direção.
-     CheckInput()	Lê as teclas e impede movimentos diagonais.
-     StartMove()	Calcula a próxima célula e define o destino. --> Move()
-     MoveToTarget()	Move o personagem até o destino. --> OnMove()
-*/
