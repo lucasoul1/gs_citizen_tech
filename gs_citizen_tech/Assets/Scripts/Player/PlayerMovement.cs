@@ -83,15 +83,16 @@ public class PlayerMovement : MonoBehaviour
         Vector2 startPosition = rb.position;
         Vector2 targetPosition = startPosition + direction;
 
-        // Percorre a distância suavemente durante o tempo definido.
+        // Guarda a duração deste passo antes de começar.
+        float stepDuration = moveDuration;
         float elapsedTime = 0f;
 
-        while (elapsedTime < moveDuration)
+        while (elapsedTime < stepDuration)
         {
             elapsedTime += Time.deltaTime;
 
             float progress = Mathf.Clamp01(
-                elapsedTime / moveDuration
+                elapsedTime / stepDuration
             );
 
             MovePlayer(startPosition, targetPosition, progress);
